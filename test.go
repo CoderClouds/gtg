@@ -2,13 +2,13 @@
   create by yy on 2019-10-21
 */
 
-package test
+package main
 
 import (
 	"flag"
 	"fmt"
+	"log"
 	"os"
-	"testing"
 )
 
 // 实际中应该用更好的变量名
@@ -25,7 +25,7 @@ var (
 	g string
 )
 
-func initFlag() {
+func InitFlag() {
 	flag.BoolVar(&h, "h", false, "this help")
 
 	flag.BoolVar(&v, "v", false, "show version and exit")
@@ -56,15 +56,17 @@ func usage() {
 	flag.PrintDefaults()
 }
 
-func TestNginx(t *testing.T) {
-	// PS: go test 来测试 flag包是不现实的，
-	// 因为 go test 本身就是一个内置功能模块，拥有自己的flag set。
-	// 而 go test -args 这个flag只能接收到 flag.Args() ，于是是无法接收到 custom flag的，建议直接新建包 并用main函数编译之后运行。
-	initFlag()
+func TestFlagString()  {
+	currentPath, _ := os.Getwd()
+	//flag.Usage = Usage
+	message := flag.String("s", "default s message", "it's user send message[help message]")
 	flag.Parse()
-	argsList := flag.Args()
-	fmt.Println(argsList)
-	if h {
-		flag.Usage()
+	args := flag.Args()
+	if len(args) < 1{
+		fmt.Println("no flag")
+	}else {
+		fmt.Println("args: ", args)
 	}
+
+	log.Println("message:", *message, "current path", currentPath)
 }
