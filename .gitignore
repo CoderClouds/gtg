@@ -3,6 +3,5 @@
 .DS_Store
 **/.DS_Store
 go.sum
-test
 main
 gtg
