@@ -51,20 +51,20 @@ func usage() {
 	_, _ = fmt.Fprintf(os.Stderr, `nginx version: nginx/1.10.0
 	Usage: nginx [-hvVtTq] [-s signal] [-c filename] [-p prefix] [-g directives]
 	
-	Options:
-	`)
+	Options: 
+`)
 	flag.PrintDefaults()
 }
 
-func TestFlagString()  {
+func TestFlagString() {
 	currentPath, _ := os.Getwd()
-	//flag.Usage = Usage
+	// flag.Usage = Usage
 	message := flag.String("s", "default s message", "it's user send message[help message]")
 	flag.Parse()
 	args := flag.Args()
-	if len(args) < 1{
+	if len(args) < 1 {
 		fmt.Println("no flag")
-	}else {
+	} else {
 		fmt.Println("args: ", args)
 	}
 
