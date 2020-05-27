@@ -9,6 +9,10 @@
 2. Construct
 
        go build
+       
+       mv gtg (the place where you want to create project)
+       
+       ./gtg new project_name
 
 ## Usage
 
