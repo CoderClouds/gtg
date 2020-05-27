@@ -5,33 +5,42 @@
 package app
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 type GetTemplate struct {
-	dirName string
+	dirName    string
+	replaceStr string
+	finalName  string
 }
 
+// 启动程序(入口程序)
 func StartCreate(dirName string) {
 	var (
 		err error
 	)
 
-	getTemplate := &GetTemplate{dirName: dirName}
+	getTemplate := &GetTemplate{
+		dirName:    dirName,
+		replaceStr: "gin_template",
+	}
 
-	getTemplate.replaceName()
-
-	return
 	if err = getTemplate.clone(); err != nil {
 		err = NewReportError(err)
 		fmt.Println(err)
 	}
+
+	getTemplate.replaceName()
 }
 
+// 从git仓库拉取 模板文件 并且命名为 用户自定义的名称 dirName
 func (g *GetTemplate) clone() (err error) {
 
 	var (
@@ -82,6 +91,7 @@ func (g *GetTemplate) clone() (err error) {
 	return
 }
 
+// 替换所有 gin_template 字样
 func (g *GetTemplate) replaceName() {
 	// 首先获取所有文件列表
 	var (
@@ -92,6 +102,12 @@ func (g *GetTemplate) replaceName() {
 
 	path := g.dirName
 
+	nameArr := strings.Split(g.dirName, "/")
+	g.finalName = nameArr[len(nameArr)-1]
+	if g.finalName == "" {
+		g.finalName = nameArr[len(nameArr)-2]
+	}
+
 	if !strings.Contains(path, "/") {
 		path = path + "/"
 	}
@@ -101,12 +117,16 @@ func (g *GetTemplate) replaceName() {
 		fmt.Println(err)
 	}
 
+	// 阻塞，主要是有递归存在，所以不能直接用一个channel来进行阻塞，这里选择填充满
+	// handleLockChan来 判断程序是否执行完，如果是满的则 会阻塞，
+	// 一直到所有协程执行完毕，才能塞入值解除阻塞
 	for i := 0; i < 10; i++ {
 		handleLockChan <- 1
 	}
 
 }
 
+// clone出错或者 其他操作出错的时候 删除文件夹
 func (g *GetTemplate) deleteTmpDir() (err error) {
 
 	var (
@@ -127,6 +147,7 @@ func (g *GetTemplate) deleteTmpDir() (err error) {
 	return
 }
 
+// 遍历所有文件
 func (g *GetTemplate) traverseDir(path string, handleLockChan chan int) (err error) {
 	var (
 		ok      bool
@@ -156,16 +177,67 @@ func (g *GetTemplate) traverseDir(path string, handleLockChan chan int) (err err
 
 		handleLockChan <- 1
 
-		go g.handleFile(tmpPath, handleLockChan)
+		go g.handleFile(path, f.Name(), handleLockChan)
 	}
 
 	return
 }
 
-func (g *GetTemplate) handleFile(path string, handleLockChan chan int) {
-	fmt.Println(path)
+// 读写文件
+// 此函数的读写规则是边读边写，牺牲内存提高效率
+func (g *GetTemplate) handleFile(path, fileName string, handleLockChan chan int) {
+	var (
+		err       error
+		readFile  *os.File
+		writeFile *os.File
+		readSize  int
+		bufSize   int
+	)
 
-	<-handleLockChan
+	// 首先读文件
+	oldPath := path + fileName
+	readFile, err = os.Open(oldPath)
 
-	return
+	// 打开 要一个临时文件，用于写入
+	newPath := path + "new_" + fileName
+	writeFile, err = os.OpenFile(newPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+
+	defer func() {
+		if err = readFile.Close(); err != nil {
+			fmt.Println(err)
+		}
+		if err = writeFile.Close(); err != nil {
+			fmt.Println(err)
+		}
+
+		// 删除源文件
+		if err = os.Remove(oldPath); err != nil {
+			fmt.Println(err)
+		}
+		// 移动新文件为源文件名
+		if err = os.Rename(newPath, oldPath); err != nil {
+			fmt.Println(err)
+		}
+
+		<-handleLockChan
+	}()
+
+	reader := bufio.NewReader(readFile)
+	bufSize = 512
+	buf := make([]byte, bufSize)
+
+	for {
+		// 读数据
+		readSize, err = reader.Read(buf)
+		s := string(buf[:readSize])
+
+		// 写入
+		if _, err = writeFile.Write([]byte(strings.Replace(s, g.replaceStr, g.finalName, -1))); err != nil {
+			fmt.Println(err)
+		}
+
+		if readSize < bufSize || readSize <= 0 || err == io.EOF {
+			break
+		}
+	}
 }
