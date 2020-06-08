@@ -6,6 +6,7 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,10 +16,18 @@ import (
 	"strings"
 )
 
+type stdType string
+
+const (
+	STDERR stdType = "stderr"
+	STDOUT stdType = "stdout"
+)
+
 type GetTemplate struct {
 	dirName    string
 	replaceStr string
 	finalName  string
+	isExists   bool
 }
 
 // 启动程序(入口程序)
@@ -30,64 +39,134 @@ func StartCreate(dirName string) {
 	getTemplate := &GetTemplate{
 		dirName:    dirName,
 		replaceStr: "gin_template",
+		isExists:   false,
 	}
+
+	defer func() {
+		if getTemplate.isExists {
+			// 如果是移动了 原来的文件夹，则还原
+			_, _ = getTemplate.executeScript("mv gin_template_old gin_template", STDERR)
+		}
+	}()
 
 	if err = getTemplate.clone(); err != nil {
 		err = NewReportError(err)
 		fmt.Println(err)
+		return
 	}
 
 	getTemplate.replaceName()
+
 }
 
 // 从git仓库拉取 模板文件 并且命名为 用户自定义的名称 dirName
 func (g *GetTemplate) clone() (err error) {
-
-	var (
-		bytes []byte
-	)
-
 	// 这里应该做一个容错操作，如果当前目录下已经有了gin_template文件夹，
 	// 则先将 原本的 gin_template 文件夹进行改名，在 clone的gin_template文件夹被改名之后再恢复其名称
 	// 为了防止 改名操作出现重名， 用 MD5 加密后的字符串 作为文件名
-	command := "git clone https://github.com/guaidashu/gin_template.git"
-	fmt.Println(command)
 
-	cmd := exec.Command("/bin/bash", "-c", command)
+	// 开始判断是否存在gin_template
+	var (
+		result string
+	)
 
-	if bytes, err = cmd.Output(); err != nil {
-		fmt.Println(string(bytes))
+	if result, err = g.executeScript("ls", STDOUT, false); err != nil {
 		err = NewReportError(err)
-		log.Println(err)
 		return
 	}
 
+	if strings.Contains(result, "gin_template") {
+		// 如果存在就进行移动
+		g.isExists = true
+		_, _ = g.executeScript("mv gin_template gin_template_old", STDERR)
+	}
+
+	// 拉取源项目
+	if _, err = g.executeScript("git clone https://github.com/guaidashu/gin_template.git", STDERR); err != nil {
+		err = NewReportError(err)
+		return
+	}
+
+	// 将clone文件命名为 目标文件夹名
 	command2 := "mv gin_template %v"
 	command2 = fmt.Sprintf(command2, g.dirName)
 	fmt.Println(command2)
 
-	cmd2 := exec.Command("/bin/bash", "-c", command2)
-
-	if bytes, err = cmd2.Output(); err != nil {
+	if _, err = g.executeScript(command2, STDERR); err != nil {
 		err = NewReportError(err)
 		log.Println(err)
 		if err = g.deleteTmpDir(); err != nil {
-			fmt.Println(err)
+			err = NewReportError(err)
 		}
 		return
 	}
 
+	// 进入 项目文件夹删除.idea 文件夹和 .git文件夹
 	command3 := "cd %v && rm -rf .idea && rm -rf .git"
 	command3 = fmt.Sprintf(command3, g.dirName)
-	cmd3 := exec.Command("/bin/bash", "-c", command3)
-
-	if bytes, err = cmd3.Output(); err != nil {
+	fmt.Println(command3)
+	if _, err = g.executeScript(command3, STDERR); err != nil {
 		err = NewReportError(err)
-		log.Println(err)
 		return
 	}
 
-	// 接下来进行文件替换
+	return
+}
+
+// 通用执行脚本函数(默认会打印内容, 传入一个参数则进行判断)
+func (g *GetTemplate) executeScript(command string, mode stdType, isPrintArr ...bool) (result string, err error) {
+	var (
+		ctx     context.Context
+		scanner *bufio.Scanner
+		message string
+		stdErr  io.ReadCloser
+		isPrint = true
+	)
+
+	if len(isPrintArr) > 0 {
+		isPrint = isPrintArr[0]
+	}
+
+	ctx = context.TODO()
+
+	cmd := exec.CommandContext(ctx, "/bin/bash", "-c", command)
+
+	switch mode {
+	case STDERR:
+		if stdErr, err = cmd.StderrPipe(); err != nil {
+			err = NewReportError(err)
+			return
+		}
+	case STDOUT:
+		if stdErr, err = cmd.StdoutPipe(); err != nil {
+			err = NewReportError(err)
+			return
+		}
+	}
+
+	if err = cmd.Start(); err != nil {
+		err = NewReportError(err)
+		return
+	}
+
+	scanner = bufio.NewScanner(stdErr)
+	scanner.Split(bufio.ScanLines)
+
+	if isPrint {
+		for scanner.Scan() {
+			message = scanner.Text()
+			result = result + message
+			if _, err = fmt.Fprintf(os.Stderr, "%v\n", message); err != nil {
+				err = NewReportError(err)
+				return
+			}
+		}
+	}
+
+	if err = cmd.Wait(); err != nil {
+		err = NewReportError(err)
+	}
+
 	return
 }
 
