@@ -28,6 +28,7 @@ type GetTemplate struct {
 	replaceStr string
 	finalName  string
 	isExists   bool
+	cloneAddr  string
 }
 
 // 启动程序(入口程序)
@@ -40,12 +41,13 @@ func StartCreate(dirName string) {
 		dirName:    dirName,
 		replaceStr: "gin_template",
 		isExists:   false,
+		cloneAddr:  "https://github.com/guaidashu/gin_template.git",
 	}
 
 	defer func() {
 		if getTemplate.isExists {
 			// 如果是移动了 原来的文件夹，则还原
-			_, _ = getTemplate.executeScript("mv gin_template_old gin_template", STDERR)
+			_, _ = getTemplate.executeScript(fmt.Sprintf("mv %v_old %v", getTemplate.replaceStr, getTemplate.replaceStr), STDERR)
 		}
 	}()
 
@@ -75,21 +77,21 @@ func (g *GetTemplate) clone() (err error) {
 		return
 	}
 
-	if strings.Contains(result, "gin_template") {
+	if strings.Contains(result, fmt.Sprintf("%v", g.replaceStr)) {
 		// 如果存在就进行移动
 		g.isExists = true
-		_, _ = g.executeScript("mv gin_template gin_template_old", STDERR)
+		_, _ = g.executeScript(fmt.Sprintf("mv %v %v_old", g.replaceStr, g.replaceStr), STDERR)
 	}
 
 	// 拉取源项目
-	if _, err = g.executeScript("git clone https://github.com/guaidashu/gin_template.git", STDERR); err != nil {
+	if _, err = g.executeScript(fmt.Sprintf("git clone %v", g.cloneAddr), STDERR); err != nil {
 		err = NewReportError(err)
 		return
 	}
 
 	// 将clone文件命名为 目标文件夹名
-	command2 := "mv gin_template %v"
-	command2 = fmt.Sprintf(command2, g.dirName)
+	command2 := "mv %v %v"
+	command2 = fmt.Sprintf(command2, g.replaceStr, g.dirName)
 	fmt.Println(command2)
 
 	if _, err = g.executeScript(command2, STDERR); err != nil {
