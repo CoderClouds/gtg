@@ -72,7 +72,7 @@ func (g *GetTemplate) clone() (err error) {
 		result string
 	)
 
-	if result, err = g.executeScript("ls", STDOUT, false); err != nil {
+	if result, err = g.executeScript("ls", STDOUT); err != nil {
 		err = NewReportError(err)
 		return
 	}
@@ -156,8 +156,15 @@ func (g *GetTemplate) executeScript(command string, mode stdType, isPrintArr ...
 
 	if isPrint {
 		for scanner.Scan() {
+
 			message = scanner.Text()
 			result = result + message
+
+			// 如果是ls,则不进行打印
+			if command == "ls" {
+				continue
+			}
+
 			if _, err = fmt.Fprintf(os.Stderr, "%v\n", message); err != nil {
 				err = NewReportError(err)
 				return
