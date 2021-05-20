@@ -130,7 +130,6 @@ func (g *GetTemplate) executeScript(command string, mode stdType, isPrintArr ...
 	}
 
 	ctx = context.TODO()
-
 	cmd := exec.CommandContext(ctx, "/bin/bash", "-c", command)
 
 	switch mode {
@@ -156,7 +155,6 @@ func (g *GetTemplate) executeScript(command string, mode stdType, isPrintArr ...
 
 	if isPrint {
 		for scanner.Scan() {
-
 			message = scanner.Text()
 			result = result + message
 
@@ -189,7 +187,6 @@ func (g *GetTemplate) replaceName() {
 	handleLockChan := make(chan int, 10)
 
 	path := g.dirName
-
 	nameArr := strings.Split(g.dirName, "/")
 	g.finalName = nameArr[len(nameArr)-1]
 	if g.finalName == "" {
@@ -211,7 +208,6 @@ func (g *GetTemplate) replaceName() {
 	for i := 0; i < 10; i++ {
 		handleLockChan <- 1
 	}
-
 }
 
 // clone出错或者 其他操作出错的时候 删除文件夹
@@ -225,7 +221,6 @@ func (g *GetTemplate) deleteTmpDir() (err error) {
 	command = fmt.Sprintf(command, g.dirName)
 
 	cmd := exec.Command("/bin/bash", "-c", command)
-
 	if bytes, err = cmd.Output(); err != nil {
 		err = NewReportError(err)
 		log.Println(err)
@@ -243,9 +238,7 @@ func (g *GetTemplate) traverseDir(path string, handleLockChan chan int) (err err
 	)
 
 	// 对path进行处理，
-
 	files, _ := ioutil.ReadDir(path)
-
 	for _, f := range files {
 		tmpPath = path + f.Name()
 		// 如果是文件夹，则进行递归遍历 扫描文件夹
@@ -262,9 +255,7 @@ func (g *GetTemplate) traverseDir(path string, handleLockChan chan int) (err err
 		// 如果是文件，则直接读取并 进行相关的内容修改操作
 		// 以协程的方式打开，为了加速效率，但是需要限制一定量，目前 限制为同时打开十个文件
 		// 所以需要创建一个 限制的channel
-
 		handleLockChan <- 1
-
 		go g.handleFile(path, f.Name(), handleLockChan)
 	}
 
